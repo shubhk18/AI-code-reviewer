@@ -82,3 +82,21 @@ Copy the `https://...` URL provided by ngrok.
 
 ## 🧪 Testing
 To test the setup without creating a new PR, go to your Webhook settings on GitHub, click **Recent Deliveries**, find a `pull_request` event, and click **Redeliver**.
+
+## 🧪 Test Evidence
+**Terminal 1 - server**
+npm start
+<img width="834" height="335" alt="image" src="https://github.com/user-attachments/assets/6d0758ba-e5a6-4920-b8ea-8f33ba8e3d45" />
+
+**Terminal 2 - ngrok forwarding**
+ngrok http 127.0.0.1:3000
+<img width="847" height="483" alt="image" src="https://github.com/user-attachments/assets/c1fb09f0-8c9f-4857-9344-f715476b2b31" />
+
+Perform a commit in existing PR or create a new PR in same repository. 
+
+**Github Pull Request Comments-**
+<img width="1072" height="709" alt="image" src="https://github.com/user-attachments/assets/9afe7ab4-336b-48b2-89ba-8ada6914c50b" />
+
+
+
+
