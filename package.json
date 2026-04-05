@@ -1,0 +1,20 @@
+{
+  "name": "pr-code-reviewer-universal",
+  "version": "1.0.0",
+  "description": "AI-powered GitHub PR reviewer — works with Ollama, Qwen, Gemini, OpenAI, vLLM, Groq",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "@octokit/rest": "^20.1.1",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.3",
+    "node-fetch": "^3.3.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
