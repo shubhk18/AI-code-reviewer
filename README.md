@@ -94,8 +94,8 @@ ngrok http 127.0.0.1:3000
 
 Perform a commit in existing PR or create a new PR in same repository. 
 
-**Github Pull Request Comments-**
-<img width="1072" height="709" alt="image" src="https://github.com/user-attachments/assets/9afe7ab4-336b-48b2-89ba-8ada6914c50b" />
+**Github Pull Request Sample Comments-**
+<img width="1072" height="709" alt="image" src="https://github.com/user-attachments/assets/86237efe-d568-4a9b-8daf-5feffb7badf9" />
 
 
 
