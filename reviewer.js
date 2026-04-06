@@ -1,14 +1,29 @@
 /**
- * Build a prompt that asks the LLM to check the PR diff for syntax errors only.
- *
- * @param {string} diff - The PR diff text.
- * @param {string} [title=""] - The PR title.
- * @param {string} [commitSha=""] - The commit SHA for cache busting.
- * @returns {string} The prompt sent to the LLM.
+ * Build a prompt to identify the primary programming language(s) in the diff.
  */
-export function buildSyntaxCheckPrompt(diff, title = "", commitSha = "") {
-  return `Act as a strict compiler (g++, clang, or similar). 
-Analyze this PR diff for SYNTAX ERRORS ONLY.
+export function buildLanguageDetectionPrompt(diff) {
+  return `Analyze this PR diff and identify the primary programming language(s) used.
+Return ONLY a JSON object.
+
+DIFF:
+\`\`\`
+${diff.slice(0, 5000)}
+\`\`\`
+
+Format:
+{
+  "languages": ["Language1", "Language2"],
+  "main": "PrimaryLanguage"
+}
+`;
+}
+
+/**
+ * Build a prompt that asks the LLM to check the PR diff for syntax errors only.
+ */
+export function buildSyntaxCheckPrompt(diff, title = "", commitSha = "", language = "code") {
+  return `Act as a strict ${language} compiler. 
+Analyze this PR diff for ${language.toUpperCase()} SYNTAX ERRORS ONLY.
 
 PR Title: ${title || "Untitled PR"}
 Commit: ${commitSha || "Latest"}
@@ -17,7 +32,7 @@ DIFF:
 \`\`\`
 ${diff.slice(0, 25000)}
 \`\`\`
-${diff.length > 25000 ? "\n[Note: Diff truncated for length. Focus on the visible parts.]\n" : ""}
+${diff.length > 25000 ? "\n[Note: Diff truncated for length.]\n" : ""}
 
 Return ONLY valid JSON. Format:
 {
@@ -31,25 +46,16 @@ Return ONLY valid JSON. Format:
   ]
 }
 
-If no syntax errors are found, return {"syntax_errors": []}.
 LINE NUMBERING RULES:
-1. Look at the hunk header: @@ -old_line,count +new_line,count @@
-2. The "line" property MUST be the absolute line number in the NEW file (indicated by +).
-3. Count carefully: a line with '+' is added, a line with '-' is removed (ignored for counting new line numbers), and a line with a space ' ' is unchanged.
-
-Look specifically for: typos in operators (like < instead of <<), missing semicolons, unmatched brackets, or undeclared variables.`;
+1. Look at the hunk header: @@ -old,count +new,count @@
+2. The "line" property MUST be the absolute line number in the NEW file (+).`;
 }
 
 /**
- * Build a prompt that asks the LLM to perform a complete code review of the PR diff.
- *
- * @param {string} diff - The PR diff text.
- * @param {string} [title=""] - The PR title.
- * @param {string} [commitSha=""] - The commit SHA for cache busting.
- * @returns {string} The prompt sent to the LLM.
+ * Build a prompt that asks the LLM to perform a complete code review.
  */
-export function buildReviewPrompt(diff, title = "", commitSha = "") {
-  return `You are an expert senior code reviewer. Analyze this GitHub Pull Request diff and return ONLY a JSON object.
+export function buildReviewPrompt(diff, title = "", commitSha = "", language = "code") {
+  return `You are an expert senior ${language} developer. Analyze this ${language} PR diff and return ONLY a JSON object.
 
 PR Title: ${title || "Untitled PR"}
 Commit: ${commitSha || "Latest"}
@@ -58,48 +64,44 @@ DIFF:
 \`\`\`
 ${diff.slice(0, 25000)}
 \`\`\`
-${diff.length > 25000 ? "\n[Note: Diff truncated for length. Focus on the visible parts.]\n" : ""}
 
-Return ONLY valid JSON (no markdown, no explanation). Format:
+Return ONLY valid JSON. Format:
 {
-  "summary": "2-3 sentence overall assessment highlighting the most important changes",
+  "summary": "2-3 sentence overall assessment",
   "comments": [
     {
       "severity": "critical|warning|suggestion",
       "category": "Security|Performance|Code Quality|Test Coverage",
       "file": "path/to/file.js or General",
       "line": 42,
-      "message": "A thorough explanation of WHY this is an issue and its potential impact. Do not be vague.",
-      "suggestion": "A clear, copy-pasteable code snippet or a step-by-step fix."
+      "message": "Clear explanation",
+      "suggestion": "Code snippet"
     }
   ]
 }
 
 LINE NUMBERING RULES:
-1. Use the hunk headers (@@ -L,n +new_L,n @@) to calculate absolute line numbers in the new file.
-2. The "line" property MUST be the line number in the NEW version of the file.
-3. If you are unsure of the exact line, use the nearest confident line number.
+1. Use hunk headers (@@ -L,n +new_L,n @@) for absolute line numbers in the new file.
 
-Review focus:
-- Security: SQL injection, XSS, hardcoded secrets, insecure auth, exposed API keys
-- Performance: N+1 queries, blocking I/O, memory leaks, unnecessary loops
-- Code Quality: naming, complexity, error handling, duplication, readability
-- Test Coverage: missing tests, edge cases, mocks
-
-Guidelines:
-- If overall code is good, provide positive feedback in the summary.
-- Omit "line" ONLY if it's a general architectural comment.
-- Ensure the "line" number matches the line in the NEW file.
-- Be pedagogical: explain the best practice behind your suggestion.`;
+Review focus for ${language}:
+- Security: SQL injection, XSS, secrets, insecure auth
+- Performance: N+1 queries, I/O, memory, loops
+- Code Quality: naming, complexity, readability
+- ${language} Specifics: Idiomatic patterns and best practices.`;
 }
 
 // ─── Response Parsers ──────────────────────────────────────────────────────────
-/**
- * Parse the syntax-check JSON response returned by the LLM.
- *
- * @param {string} raw - Raw model response text.
- * @returns {Array<object>} Normalized syntax error comments.
- */
+
+export function parseLanguageResponse(raw) {
+  try {
+    const text = cleanJSON(raw);
+    const parsed = JSON.parse(text);
+    return parsed.main || "code";
+  } catch {
+    return "code";
+  }
+}
+
 export function parseSyntaxResponse(raw) {
   try {
     const text = cleanJSON(raw);
@@ -117,12 +119,6 @@ export function parseSyntaxResponse(raw) {
   }
 }
 
-/**
- * Parse the standard review JSON response returned by the LLM.
- *
- * @param {string} raw - Raw model response text.
- * @returns {{summary: string, comments: Array<object>}} Parsed review payload.
- */
 export function parseReviewResponse(raw) {
   if (!raw) return fallback("Empty response from model.");
   const text = cleanJSON(raw);
@@ -173,12 +169,7 @@ function fallback(summary) {
   return { summary, comments: [] };
 }
 
-// ─── Severity Emoji ───────────────────────────────────────────────────────────
 export function getSeverityEmoji(severity) {
-  const map = {
-    critical: "🔴",
-    warning: "🟡",
-    suggestion: "🟢",
-  };
+  const map = { critical: "🔴", warning: "🟡", suggestion: "🟢" };
   return map[severity] || "🔵";
 }

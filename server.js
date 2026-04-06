@@ -3,8 +3,10 @@ import crypto from "crypto";
 import { Octokit } from "@octokit/rest";
 import { callLLM, providerLabel } from "./llm.js";
 import { 
+  buildLanguageDetectionPrompt,
   buildSyntaxCheckPrompt, 
   buildReviewPrompt, 
+  parseLanguageResponse,
   parseSyntaxResponse, 
   parseReviewResponse, 
   getSeverityEmoji 
@@ -214,15 +216,22 @@ app.post("/webhook", async (req, res) => {
         return;
       }
 
+      // ─── Pass 0: Language Detection ───
+      console.log(`🔍 Pass 0: Language Detection (${providerLabel()})...`);
+      const langPrompt = buildLanguageDetectionPrompt(diff);
+      const langRaw = await withRetry(() => callLLM(langPrompt), 3, 5000);
+      const language = parseLanguageResponse(langRaw);
+      console.log(`📝 Detected Language: ${language}`);
+
       // ─── Pass 1: Syntax Check (Virtual Compilation) ───
       console.log(`🔍 Pass 1: Syntax Check (${providerLabel()})...`);
-      const syntaxPrompt = buildSyntaxCheckPrompt(diff, title, head);
+      const syntaxPrompt = buildSyntaxCheckPrompt(diff, title, head, language);
       const syntaxRaw = await withRetry(() => callLLM(syntaxPrompt), 3, 5000);
       const syntaxComments = parseSyntaxResponse(syntaxRaw);
 
       // ─── Pass 2: Standard Review ───
       console.log(`🔍 Pass 2: Standard Review (${providerLabel()})...`);
-      const reviewPrompt = buildReviewPrompt(diff, title, head);
+      const reviewPrompt = buildReviewPrompt(diff, title, head, language);
       const reviewRaw = await withRetry(() => callLLM(reviewPrompt), 3, 5000);
       const review = parseReviewResponse(reviewRaw);
 
