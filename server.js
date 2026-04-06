@@ -11,6 +11,19 @@ import {
 } from "./reviewer.js";
 import "dotenv/config";
 
+/**
+ * PR Reviewer Server
+ *
+ * This server receives GitHub pull request webhook events, validates the
+ * webhook signature, fetches the PR diff, and runs a two-pass analysis using
+ * a configured LLM provider.
+ *
+ * Pass 1: syntax check / virtual compiler errors
+ * Pass 2: standard code review
+ *
+ * Finally, it posts a GitHub review back to the PR with summary and inline
+ * comments.
+ */
 const app = express();
 
 // ─── Config ────────────────────────────────────────────────────────────────
@@ -21,6 +34,14 @@ const GITHUB_TOKEN   = process.env.GITHUB_TOKEN;
 const octokit = new Octokit({ auth: GITHUB_TOKEN });
 
 // ─── Retry Helper ─────────────────────────────────────────────────────────────
+/**
+ * Execute a promise-returning function with retry logic.
+ *
+ * @param {() => Promise<any>} fn - The function to execute.
+ * @param {number} retries - Number of retry attempts.
+ * @param {number} delay - Delay between retries in milliseconds.
+ * @returns {Promise<any>} The returned value from the executed function.
+ */
 async function withRetry(fn, retries = 3, delay = 5000) {
   for (let i = 0; i < retries; i++) {
     try {
@@ -37,6 +58,12 @@ async function withRetry(fn, retries = 3, delay = 5000) {
 app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } }));
 
 // ─── Webhook Signature Verification ──────────────────────────────────────────
+/**
+ * Verify a GitHub webhook request signature.
+ *
+ * @param {import("express").Request} req - Incoming Express request.
+ * @returns {boolean} True when the signature is valid or no secret is configured.
+ */
 function verifySignature(req) {
   if (!WEBHOOK_SECRET) return true;
   const signature = req.headers["x-hub-signature-256"];
@@ -49,6 +76,14 @@ function verifySignature(req) {
 }
 
 // ─── GitHub Helpers ───────────────────────────────────────────────────────────
+/**
+ * Fetch the diff for a GitHub pull request.
+ *
+ * @param {string} owner - Repository owner.
+ * @param {string} repo - Repository name.
+ * @param {number} pullNumber - Pull request number.
+ * @returns {Promise<string>} The diff text.
+ */
 async function getPRDiff(owner, repo, pullNumber) {
   const { data } = await octokit.pulls.get({
     owner,
@@ -61,6 +96,15 @@ async function getPRDiff(owner, repo, pullNumber) {
   return data;
 }
 
+/**
+ * Post a review on the PR with an optional summary and inline comments.
+ *
+ * @param {string} owner - Repository owner.
+ * @param {string} repo - Repository name.
+ * @param {number} pullNumber - Pull request number.
+ * @param {string} commitSha - The head commit SHA.
+ * @param {object} review - Parsed review object containing summary and comments.
+ */
 async function postReviewComment(owner, repo, pullNumber, commitSha, review) {
   const comments = (review.comments || [])
     .filter(c => c.file && c.file !== "General" && c.line)
@@ -76,17 +120,39 @@ async function postReviewComment(owner, repo, pullNumber, commitSha, review) {
       };
     });
 
-  await octokit.pulls.createReview({
-    owner, repo,
-    pull_number: pullNumber,
-    commit_id: commitSha,
-    body: buildSummaryComment(review),
-    event: "COMMENT",
-    comments: comments.length > 0 ? comments : undefined,
-  });
+  try {
+    await octokit.pulls.createReview({
+      owner, repo,
+      pull_number: pullNumber,
+      commit_id: commitSha,
+      body: buildSummaryComment(review),
+      event: "COMMENT",
+      comments: comments.length > 0 ? comments : undefined,
+    });
+  } catch (err) {
+    if (err.message.includes("Line could not be resolved")) {
+      console.log("⚠️  Line resolution failed (AI hallucination). Falling back to summary-only review.");
+      await octokit.pulls.createReview({
+        owner, repo,
+        pull_number: pullNumber,
+        commit_id: commitSha,
+        body: buildSummaryComment(review, true),
+        event: "COMMENT",
+      });
+    } else {
+      throw err;
+    }
+  }
 }
 
-function buildSummaryComment(review) {
+/**
+ * Build the summary body for the GitHub review.
+ *
+ * @param {object} review - Parsed review object from the LLM.
+ * @param {boolean} includeFullDetails - Whether to include all comments in the summary.
+ * @returns {string} Formatted Markdown summary for the PR review.
+ */
+function buildSummaryComment(review, includeFullDetails = false) {
   const counts = { critical: 0, warning: 0, suggestion: 0 };
   (review.comments || []).forEach(c => { counts[c.severity] = (counts[c.severity] || 0) + 1; });
 
@@ -95,20 +161,24 @@ function buildSummaryComment(review) {
     .map(([s, n]) => `**${getSeverityEmoji(s)} ${n} ${s}${n > 1 ? "s" : ""}**`)
     .join("  |  ");
 
-  return [
+  const lines = [
     "## 🤖 AI Code Review",
     badges ? `\n${badges}\n` : "",
     "### Summary",
     review.summary || "No summary provided.",
     "",
-    "### Issues",
-    ...(review.comments || []).map(c =>
-      `- ${getSeverityEmoji(c.severity)} **[${c.category}]** \`${c.file || "General"}\`${c.line ? ` (Line ${c.line})` : ""} — ${c.message}`
-    ),
-    "",
-    "---",
-    `*Reviewed by ${providerLabel()}*`,
-  ].join("\n");
+    "### Issues Found",
+  ];
+
+  (review.comments || []).forEach(c => {
+    lines.push(`- ${getSeverityEmoji(c.severity)} **[${c.category}]** \`${c.file || "General"}\`${c.line ? ` (Line ${c.line})` : ""} — ${c.message}`);
+    if (includeFullDetails && c.suggestion) {
+      lines.push(`  > **Suggested Fix:**\n  > \`\`\`\n  > ${c.suggestion.replace(/\n/g, "\n  > ")}\n  > \`\`\``);
+    }
+  });
+
+  lines.push("", "---", `*Reviewed by ${providerLabel()}*`);
+  return lines.join("\n");
 }
 
 // ─── Webhook Handler ──────────────────────────────────────────────────────────
