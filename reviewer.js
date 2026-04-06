@@ -1,4 +1,10 @@
-// ─── Syntax Check Prompt ──────────────────────────────────────────────────
+/**
+ * Build a prompt that asks the LLM to check the PR diff for syntax errors only.
+ *
+ * @param {string} diff - The PR diff text.
+ * @param {string} [title=""] - The PR title.
+ * @returns {string} The prompt sent to the LLM.
+ */
 export function buildSyntaxCheckPrompt(diff, title = "") {
   return `Act as a strict compiler (g++, clang, or similar). 
 Analyze this PR diff for SYNTAX ERRORS ONLY.
@@ -26,6 +32,13 @@ If no syntax errors are found, return {"syntax_errors": []}.
 Look specifically for: typos in operators (like < instead of <<), missing semicolons, unmatched brackets, or undeclared variables.`;
 }
 
+/**
+ * Build a prompt that asks the LLM to perform a complete code review of the PR diff.
+ *
+ * @param {string} diff - The PR diff text.
+ * @param {string} [title=""] - The PR title.
+ * @returns {string} The prompt sent to the LLM.
+ */
 // ─── Standard Review Prompt ───────────────────────────────────────────────
 export function buildReviewPrompt(diff, title = "") {
   return `You are an expert senior code reviewer. Analyze this GitHub Pull Request diff and return ONLY a JSON object.
@@ -66,6 +79,12 @@ Guidelines:
 }
 
 // ─── Response Parsers ──────────────────────────────────────────────────────────
+/**
+ * Parse the syntax-check JSON response returned by the LLM.
+ *
+ * @param {string} raw - Raw model response text.
+ * @returns {Array<object>} Normalized syntax error comments.
+ */
 export function parseSyntaxResponse(raw) {
   try {
     const text = cleanJSON(raw);
@@ -83,6 +102,12 @@ export function parseSyntaxResponse(raw) {
   }
 }
 
+/**
+ * Parse the standard review JSON response returned by the LLM.
+ *
+ * @param {string} raw - Raw model response text.
+ * @returns {{summary: string, comments: Array<object>}} Parsed review payload.
+ */
 export function parseReviewResponse(raw) {
   if (!raw) return fallback("Empty response from model.");
   const text = cleanJSON(raw);

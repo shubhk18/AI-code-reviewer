@@ -1,17 +1,12 @@
 /**
  * llm.js — Universal LLM Adapter
  *
- * Supports:
- *   PROVIDER=ollama     → Ollama (local or VM)
- *   PROVIDER=gemini     → Google Gemini API
- *   PROVIDER=openai     → OpenAI or any OpenAI-compatible endpoint
- *                         (Qwen, LM Studio, vLLM, Together AI, Groq, etc.)
+ * This module sends a text prompt to the configured model provider and returns
+ * the raw model text response. It supports Ollama, OpenAI-compatible APIs, and
+ * Google Gemini.
  *
- * For Qwen Coder on a VM:
- *   PROVIDER=openai
- *   LLM_BASE_URL=http://<your-vm-ip>:8000/v1
- *   LLM_API_KEY=none
- *   LLM_MODEL=qwen2.5-coder:7b
+ * Configuration is loaded from environment variables:
+ *   PROVIDER, LLM_BASE_URL, LLM_API_KEY, LLM_MODEL, GEMINI_MODEL
  */
 
 import fetch from "node-fetch";
@@ -24,6 +19,12 @@ const LLM_MODEL    = process.env.LLM_MODEL    || "codellama";
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash";
 
 // ─── Public: call the configured LLM ─────────────────────────────────────────
+/**
+ * Send the prompt to the configured LLM provider.
+ *
+ * @param {string} prompt - The prompt text to send to the model.
+ * @returns {Promise<string>} The model response text.
+ */
 export async function callLLM(prompt) {
   switch (PROVIDER) {
     case "gemini":  return callGemini(prompt);
@@ -34,6 +35,11 @@ export async function callLLM(prompt) {
 }
 
 // ─── Provider label (for GitHub comment footer) ───────────────────────────────
+/**
+ * Return a human-readable label for the selected LLM provider.
+ *
+ * @returns {string}
+ */
 export function providerLabel() {
   switch (PROVIDER) {
     case "gemini": return `Google Gemini · \`${GEMINI_MODEL}\``;
@@ -43,6 +49,12 @@ export function providerLabel() {
 }
 
 // ─── Ollama ───────────────────────────────────────────────────────────────────
+/**
+ * Send a prompt to an Ollama model endpoint.
+ *
+ * @param {string} prompt - The prompt text.
+ * @returns {Promise<string>} The model response text.
+ */
 async function callOllama(prompt) {
   const res = await fetch(`${LLM_BASE_URL}/api/generate`, {
     method: "POST",
@@ -60,6 +72,12 @@ async function callOllama(prompt) {
 }
 
 // ─── OpenAI-compatible (Qwen / LM Studio / vLLM / Together / Groq) ───────────
+/**
+ * Send a prompt to an OpenAI-compatible chat/completions endpoint.
+ *
+ * @param {string} prompt - The prompt text.
+ * @returns {Promise<string>} The model response text.
+ */
 async function callOpenAICompatible(prompt) {
   const baseUrl = LLM_BASE_URL.replace(/\/$/, "");
   const url = `${baseUrl}/chat/completions`;
@@ -86,6 +104,12 @@ async function callOpenAICompatible(prompt) {
 }
 
 // ─── Google Gemini ────────────────────────────────────────────────────────────
+/**
+ * Send a prompt to Google Gemini.
+ *
+ * @param {string} prompt - The prompt text.
+ * @returns {Promise<string>} The model response text.
+ */
 async function callGemini(prompt) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${LLM_API_KEY}`;
 
