@@ -2,7 +2,13 @@ import express from "express";
 import crypto from "crypto";
 import { Octokit } from "@octokit/rest";
 import { callLLM, providerLabel } from "./llm.js";
-import { buildReviewPrompt, parseReviewResponse, getSeverityEmoji } from "./reviewer.js";
+import { 
+  buildSyntaxCheckPrompt, 
+  buildReviewPrompt, 
+  parseSyntaxResponse, 
+  parseReviewResponse, 
+  getSeverityEmoji 
+} from "./reviewer.js";
 import "dotenv/config";
 
 const app = express();
@@ -13,6 +19,19 @@ const WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET;
 const GITHUB_TOKEN   = process.env.GITHUB_TOKEN;
 
 const octokit = new Octokit({ auth: GITHUB_TOKEN });
+
+// ─── Retry Helper ─────────────────────────────────────────────────────────────
+async function withRetry(fn, retries = 3, delay = 5000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (i === retries - 1) throw err;
+      console.log(`⚠️  Attempt ${i + 1} failed, retrying in ${delay / 1000}s...`);
+      await new Promise(res => setTimeout(res, delay));
+    }
+  }
+}
 
 // ─── Middleware ──────────────────────────────────────────────────────────────
 app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } }));
@@ -125,13 +144,22 @@ app.post("/webhook", async (req, res) => {
         return;
       }
 
-      const prompt = buildReviewPrompt(diff, title);
+      // ─── Pass 1: Syntax Check (Virtual Compilation) ───
+      console.log(`🔍 Pass 1: Syntax Check (${providerLabel()})...`);
+      const syntaxPrompt = buildSyntaxCheckPrompt(diff, title);
+      const syntaxRaw = await withRetry(() => callLLM(syntaxPrompt), 3, 5000);
+      const syntaxComments = parseSyntaxResponse(syntaxRaw);
 
-      console.log(`🧠 Calling LLM (${providerLabel()})...`);
-      const raw = await callLLM(prompt);
+      // ─── Pass 2: Standard Review ───
+      console.log(`🔍 Pass 2: Standard Review (${providerLabel()})...`);
+      const reviewPrompt = buildReviewPrompt(diff, title);
+      const reviewRaw = await withRetry(() => callLLM(reviewPrompt), 3, 5000);
+      const review = parseReviewResponse(reviewRaw);
 
-      const review = parseReviewResponse(raw);
-      console.log(`✅ Got ${review.comments?.length || 0} comments`);
+      // Merge comments
+      review.comments = [...syntaxComments, ...review.comments];
+      
+      console.log(`✅ Got ${review.comments?.length || 0} comments total`);
 
       await postReviewComment(owner, repo, number, head, review);
       console.log(`💬 Posted review to PR #${number}`);
