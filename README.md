@@ -1,4 +1,4 @@
-# 🤖 AI Pull Request Reviewer
+# 🤖 AI Code Reviewer
 
 An AI-powered GitHub PR reviewer that automatically analyzes pull requests and posts comments using local or cloud-based LLMs (Ollama, Qwen, Gemini, OpenAI, etc.).
 
