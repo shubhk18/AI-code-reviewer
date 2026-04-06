@@ -86,7 +86,7 @@ To test the setup without creating a new PR, go to your Webhook settings on GitH
 ## 🧪 Test Evidence
 **Terminal 1 - server** - 
 npm start
-<img width="834" height="335" alt="image" src="https://github.com/user-attachments/assets/6d0758ba-e5a6-4920-b8ea-8f33ba8e3d45" />
+<img width="1072" height="330" alt="image" src="https://github.com/user-attachments/assets/a2034431-1f36-4299-a6a1-ea6a1d1055ee" />
 
 **Terminal 2 - ngrok forwarding** -
 ngrok http 127.0.0.1:3000
@@ -95,7 +95,7 @@ ngrok http 127.0.0.1:3000
 Perform a commit in existing PR or create a new PR in same repository. 
 
 **Github Pull Request Sample Comments-**
-<img width="1072" height="709" alt="image" src="https://github.com/user-attachments/assets/86237efe-d568-4a9b-8daf-5feffb7badf9" />
+<img width="817" height="564" alt="image" src="https://github.com/user-attachments/assets/1d565232-8709-42d5-9cb7-d4e69c213f43" />
 
 
 
