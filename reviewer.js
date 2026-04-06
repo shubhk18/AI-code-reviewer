@@ -3,18 +3,21 @@
  *
  * @param {string} diff - The PR diff text.
  * @param {string} [title=""] - The PR title.
+ * @param {string} [commitSha=""] - The commit SHA for cache busting.
  * @returns {string} The prompt sent to the LLM.
  */
-export function buildSyntaxCheckPrompt(diff, title = "") {
+export function buildSyntaxCheckPrompt(diff, title = "", commitSha = "") {
   return `Act as a strict compiler (g++, clang, or similar). 
 Analyze this PR diff for SYNTAX ERRORS ONLY.
 
 PR Title: ${title || "Untitled PR"}
+Commit: ${commitSha || "Latest"}
 
 DIFF:
 \`\`\`
-${diff.slice(0, 10000)}
+${diff.slice(0, 25000)}
 \`\`\`
+${diff.length > 25000 ? "\n[Note: Diff truncated for length. Focus on the visible parts.]\n" : ""}
 
 Return ONLY valid JSON. Format:
 {
@@ -29,6 +32,11 @@ Return ONLY valid JSON. Format:
 }
 
 If no syntax errors are found, return {"syntax_errors": []}.
+LINE NUMBERING RULES:
+1. Look at the hunk header: @@ -old_line,count +new_line,count @@
+2. The "line" property MUST be the absolute line number in the NEW file (indicated by +).
+3. Count carefully: a line with '+' is added, a line with '-' is removed (ignored for counting new line numbers), and a line with a space ' ' is unchanged.
+
 Look specifically for: typos in operators (like < instead of <<), missing semicolons, unmatched brackets, or undeclared variables.`;
 }
 
@@ -37,18 +45,20 @@ Look specifically for: typos in operators (like < instead of <<), missing semico
  *
  * @param {string} diff - The PR diff text.
  * @param {string} [title=""] - The PR title.
+ * @param {string} [commitSha=""] - The commit SHA for cache busting.
  * @returns {string} The prompt sent to the LLM.
  */
-// ─── Standard Review Prompt ───────────────────────────────────────────────
-export function buildReviewPrompt(diff, title = "") {
+export function buildReviewPrompt(diff, title = "", commitSha = "") {
   return `You are an expert senior code reviewer. Analyze this GitHub Pull Request diff and return ONLY a JSON object.
 
 PR Title: ${title || "Untitled PR"}
+Commit: ${commitSha || "Latest"}
 
 DIFF:
 \`\`\`
-${diff.slice(0, 10000)}
+${diff.slice(0, 25000)}
 \`\`\`
+${diff.length > 25000 ? "\n[Note: Diff truncated for length. Focus on the visible parts.]\n" : ""}
 
 Return ONLY valid JSON (no markdown, no explanation). Format:
 {
@@ -64,6 +74,11 @@ Return ONLY valid JSON (no markdown, no explanation). Format:
     }
   ]
 }
+
+LINE NUMBERING RULES:
+1. Use the hunk headers (@@ -L,n +new_L,n @@) to calculate absolute line numbers in the new file.
+2. The "line" property MUST be the line number in the NEW version of the file.
+3. If you are unsure of the exact line, use the nearest confident line number.
 
 Review focus:
 - Security: SQL injection, XSS, hardcoded secrets, insecure auth, exposed API keys
