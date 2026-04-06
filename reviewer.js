@@ -1,6 +1,6 @@
 // ─── Prompt Builder ──────────────────────────────────────────────────────────
 export function buildReviewPrompt(diff, title = "") {
-  return `You are an expert code reviewer. Analyze this GitHub Pull Request diff and return ONLY a JSON object.
+  return `You are an expert senior code reviewer. Analyze this GitHub Pull Request diff and return ONLY a JSON object.
 
 PR Title: ${title || "Untitled PR"}
 
@@ -11,14 +11,15 @@ ${diff.slice(0, 12000)}
 
 Return ONLY valid JSON (no markdown, no explanation). Format:
 {
-  "summary": "2-3 sentence overall assessment",
+  "summary": "2-3 sentence overall assessment highlighting the most important changes",
   "comments": [
     {
       "severity": "critical|warning|suggestion",
       "category": "Security|Performance|Code Quality|Test Coverage",
       "file": "path/to/file.js or General",
       "line": 42,
-      "message": "Clear explanation and how to fix it"
+      "message": "A thorough explanation of WHY this is an issue and its potential impact. Do not be vague.",
+      "suggestion": "A clear, copy-pasteable code snippet or a step-by-step fix."
     }
   ]
 }
@@ -29,7 +30,11 @@ Review focus:
 - Code Quality: naming, complexity, error handling, duplication, readability
 - Test Coverage: missing tests, untested edge cases, no mocks for external calls
 
-Be specific and actionable. If overall code is good, say so. Omit "line" if you cannot determine a specific line number.`;
+Guidelines:
+- If overall code is good, provide positive feedback in the summary.
+- Omit "line" ONLY if it's a general architectural comment.
+- Ensure the "line" number matches the line in the NEW file.
+- Be pedagogical: explain the best practice behind your suggestion.`;
 }
 
 // ─── Response Parser ──────────────────────────────────────────────────────────
@@ -74,6 +79,7 @@ function normalizeComment(c) {
     file: c.file || "General",
     line: typeof c.line === "number" ? c.line : null,
     message: c.message || "",
+    suggestion: c.suggestion || "",
   };
 }
 

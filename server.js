@@ -45,11 +45,17 @@ async function getPRDiff(owner, repo, pullNumber) {
 async function postReviewComment(owner, repo, pullNumber, commitSha, review) {
   const comments = (review.comments || [])
     .filter(c => c.file && c.file !== "General" && c.line)
-    .map(c => ({
-      path: c.file,
-      line: c.line,
-      body: `${getSeverityEmoji(c.severity)} **${c.severity.toUpperCase()} · ${c.category}**\n\n${c.message}`,
-    }));
+    .map(c => {
+      let body = `${getSeverityEmoji(c.severity)} **${c.severity.toUpperCase()} · ${c.category}**\n\n${c.message}`;
+      if (c.suggestion) {
+        body += `\n\n**💡 Suggested Fix:**\n\n${c.suggestion}`;
+      }
+      return {
+        path: c.file,
+        line: c.line,
+        body: body,
+      };
+    });
 
   await octokit.pulls.createReview({
     owner, repo,
@@ -78,7 +84,7 @@ function buildSummaryComment(review) {
     "",
     "### Issues",
     ...(review.comments || []).map(c =>
-      `- ${getSeverityEmoji(c.severity)} **[${c.category}]** \`${c.file || "General"}\` — ${c.message}`
+      `- ${getSeverityEmoji(c.severity)} **[${c.category}]** \`${c.file || "General"}\`${c.line ? ` (Line ${c.line})` : ""} — ${c.message}`
     ),
     "",
     "---",
